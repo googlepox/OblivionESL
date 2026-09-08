@@ -33,11 +33,21 @@ void MessageHandler(OBSEMessagingInterface::Message* msg)
     {
     case OBSEMessagingInterface::kMessage_LoadGame:
     case OBSEMessagingInterface::kMessage_ExitGame:
-    case OBSEMessagingInterface::kMessage_ExitToMainMenu:
         ESLManager::Get().SavePersistentMap();
-        ESLManager::Get().ClearRuntimeState();   // m_fileToIndex, m_activeIndex
-        ESLLoadPatch::ClearFileList();           // s_eslFiles
-        ESLHooks::ClearESLCache();
+        break;
+
+    case OBSEMessagingInterface::kMessage_ExitToMainMenu:
+        // Do NOT clear runtime state here. Returning to the main menu does
+        // not necessarily unload plugins -- TESDataHandler_Clear only runs
+        // on a real unload -- so the ModEntry::Data objects usually stay
+        // valid. Clearing here left m_activeIndex empty while the files
+        // were still live, so every ESL FormID in the next save load
+        // resolved to 0 and its items vanished.
+        //
+        // The reset happens at the start of TESDataHandler_LoadFiles
+        // instead, in ESLLoadPatch::AppendFile, where a load is actually
+        // beginning.
+        ESLManager::Get().SavePersistentMap();
         break;
 
     default:

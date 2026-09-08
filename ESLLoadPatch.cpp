@@ -42,14 +42,17 @@ namespace ESLLoadPatch {
     {
         ModEntry::Data* file;
         UInt32          position;   // numLoadedMods when skipped
+        bool            loaded;     // handled by the interleaved pass already
     };
 
     static std::vector<ESLEntry> s_eslFiles;
 
-    // Set on a file once loaded, so the cleanup pass does not reload anything
-    // the interleaved pass already handled. Uses a spare bit in the runtime
-    // flags field, which is ours to use -- the engine only reads bits 0, 2, 3.
-    static const UInt32 kAlreadyLoadedMarker = 0x40000000;
+    // DIAGNOSTIC: how many times TESDataHandler_LoadFiles has begun, and how
+    // many ESL load passes have run. If a plugin is loaded twice in one session
+    // without an intervening teardown, its records exist twice -- two forms
+    // claiming one FormID, one of them orphaned -- which would corrupt any list
+    // holding them.
+    static UInt32 s_loadRunCount = 0;
 
     // Set while an ESL is being loaded. This replaces modIndex as the key for
     // "which ESL does this record belong to" -- once every ESL has file index
@@ -65,6 +68,8 @@ namespace ESLLoadPatch {
 
         _MESSAGE("[ESL] Deferred file list cleared.");
     }
+
+
 
     // ── Append handler (sites 1 and 2) ──────────────────────────────────────────
     //
@@ -87,10 +92,28 @@ namespace ESLLoadPatch {
         if (!dh || !file)
             return;
 
-        // The list is cleared on teardown via ClearFileList(), not here. An
-        // earlier version reset it lazily at this point, but that only ran if
-        // AppendFile was reached at all, and it dereferenced entries whose
-        // ModEntry::Data may already have been freed.
+        // Start of a fresh TESDataHandler_LoadFiles run: numLoadedMods has
+        // just been zeroed, so any state keyed on the previous run's files is
+        // stale and must go.
+        //
+        // Note this does NOT dereference the old entries. An earlier version
+        // cleared a marker flag on each file->flags here, which is a
+        // use-after-free if those ModEntry::Data objects have been released.
+        // "Already loaded" is tracked on our own ESLEntry instead.
+        if (dh->numLoadedMods == 0 && !s_eslFiles.empty())
+        {
+            UInt32 dropped = (UInt32)s_eslFiles.size();
+
+            s_eslFiles.clear();
+            g_currentLoadingESL = nullptr;
+
+            ESLManager::Get().ClearRuntimeState();
+            ESLHooks::ClearESLCache();
+
+            _MESSAGE("[ESL] === LoadFiles run #%u begins; runtime state reset "
+                "(%u ESL entries dropped) ===",
+                ++s_loadRunCount, dropped);
+        }
 
         if (ESLHooks::IsESLFile(file))
         {
@@ -116,6 +139,7 @@ namespace ESLLoadPatch {
             ESLEntry entry;
             entry.file = file;
             entry.position = dh->numLoadedMods;
+            entry.loaded = false;
 
             s_eslFiles.push_back(entry);
 
@@ -148,10 +172,10 @@ namespace ESLLoadPatch {
 
     static void LoadOne(DataHandler* dh, ESLEntry& entry)
     {
-        if (entry.file->flags & kAlreadyLoadedMarker)
+        if (entry.loaded)
             return;
 
-        entry.file->flags |= kAlreadyLoadedMarker;
+        entry.loaded = true;
 
         if (!OpenBSFileWrapper(entry.file, nullptr, 0, 0))
         {
@@ -168,8 +192,8 @@ namespace ESLLoadPatch {
         if (!result)
             _ERROR("[ESL] LoadFile failed for '%s'", entry.file->name);
         else
-            _MESSAGE("[ESL] Loaded '%s' at position %u",
-                entry.file->name, entry.position);
+            _MESSAGE("[ESL] Loaded '%s' at position %u (run #%u, file %p)",
+                entry.file->name, entry.position, s_loadRunCount, entry.file);
     }
 
     // Called from the tail of vanilla's load loop, once per normal plugin.
@@ -206,9 +230,6 @@ namespace ESLLoadPatch {
 
         for (ESLEntry& entry : s_eslFiles)
             LoadOne(dh, entry);
-
-        _MESSAGE("[ESL] dynamic counter: %08X",
-            *(UInt32*)((UInt8*)(*g_dataHandler) + 0x8C0));
     }
 
     // ── Record header FormID stamping (site 5) ──────────────────────────────────
