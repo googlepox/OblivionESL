@@ -16,6 +16,7 @@ namespace ESLHooks {
     tSaveFormID    g_SaveFormID = nullptr;
     tSetFormID     g_SetFormID = nullptr;
     tLoadFile      g_LoadFile = nullptr;
+    tSaveLoadResolveFormID g_SaveLoadResolveFormID = nullptr;
 
     constexpr UInt32 kESLFlag = 0x00080000;
 
@@ -386,6 +387,9 @@ namespace ESLHooks {
             return result;
         }
 
+        if (manager.HasRuntimeMapping(modIndex))
+            return result; // already registered
+
         UInt16 eslIndex = manager.GetOrRegisterESLIndex(file->name);
 
         if (eslIndex == ESLManager::kInvalid)
@@ -394,16 +398,61 @@ namespace ESLHooks {
             return result;
         }
 
-        bool alreadyMapped = manager.HasRuntimeMapping(modIndex);
+        manager.RegisterRuntimeMapping(modIndex, eslIndex);
 
-        if (!alreadyMapped)
-            manager.RegisterRuntimeMapping(modIndex, eslIndex);
-
-        _MESSAGE("[ESL] Loaded: %s (modIndex %02X -> ESL slot %u)%s",
-            file->name, modIndex, eslIndex,
-            alreadyMapped ? "  [pre-registered during record load]" : "");
+        _MESSAGE("[ESL] Loaded: %s (modIndex %02X -> ESL slot %u)",
+            file->name, modIndex, eslIndex);
 
         return result;
+    }
+
+    // ── SaveLoad_ResolveFormID ──────────────────────────────────────────────────
+    //
+    // Vanilla:
+    //
+    //   modRefIDTable = this->modRefIDTable;
+    //   if (!modRefIDTable || HIBYTE(a2) == 0xFF) return a2;
+    //   if (HIBYTE(a2) >= this->numMods)          return 0;
+    //   v3 = modRefIDTable[HIBYTE(a2)];
+    //   if (v3 == 0xFF)                           return 0;
+    //   return (a2 & 0xFFFFFF) + (v3 << 24);
+    //
+    // 0xFF (dynamic forms) is passed through untouched, but 0xFE is not. Since
+    // numMods is the plugin count recorded in the save, 0xFE >= numMods is
+    // effectively always true -- so WITHOUT this hook every ESL FormID read
+    // back from a savegame resolves to 0, a null form.
+    //
+    // ESL indices are stable across load order by design, which is the whole
+    // point of the persistent map, so they need no per-save remapping. They get
+    // the same passthrough 0xFF receives.
+    //
+    // The one case that does need handling is a plugin the user has since
+    // removed. Vanilla returns 0 for a mod no longer present, and we match that
+    // rather than resolving to whatever form now occupies the slot.
+
+    int __fastcall SaveLoadResolveFormID_Hook(
+        void* saveLoad,
+        void*,
+        int formID
+    )
+    {
+        if (((UInt32)formID >> 24) == 0xFE)
+        {
+            ESLManager& manager = ESLManager::Get();
+
+            UInt16 eslIndex = manager.DecodeIndex((UInt32)formID);
+
+            if (!manager.IsESLIndexActive(eslIndex))
+            {
+                // Plugin was in the save but is not loaded now. Same answer
+                // vanilla gives for any missing mod.
+                return 0;
+            }
+
+            return formID;
+        }
+
+        return g_SaveLoadResolveFormID(saveLoad, nullptr, formID);
     }
 
     // ── Hook installation ──────────────────────────────────────────────────────
@@ -465,6 +514,26 @@ namespace ESLHooks {
         if (!g_LoadFile)
         {
             _ERROR("LoadFile hook failed!");
+            return false;
+        }
+
+        // 0x00452180, 8 bytes. Verified against the disassembly:
+        //   00452180  8B 51 4C     mov  edx, [ecx+4Ch]
+        //   00452183  56           push esi
+        //   00452184  8B 74 24 08  mov  esi, [esp+8]
+        // Three whole instructions, no branches (first jump is at +0x0F), and
+        // the esp-relative access is safe to relocate since the trampoline is
+        // entered by a normal CALL and sees the same stack layout.
+        g_SaveLoadResolveFormID =
+            (tSaveLoadResolveFormID)ESLDetour::WriteDetour(
+                (void*)0x00452180,
+                SaveLoadResolveFormID_Hook,
+                8
+            );
+
+        if (!g_SaveLoadResolveFormID)
+        {
+            _ERROR("SaveLoad_ResolveFormID hook failed!");
             return false;
         }
 

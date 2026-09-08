@@ -37,6 +37,13 @@ namespace ESLHooks {
         bool releaseOld
         );
 
+    // int __thiscall SaveLoad_ResolveFormID(TESSaveLoad* this, int formID)
+    typedef int(__fastcall* tSaveLoadResolveFormID)(
+        void* saveLoad,
+        void* edx,
+        int formID
+        );
+
     // int __thiscall TESDataHandler::LoadFile(ModEntry::Data* file, char flag)
     typedef int(__fastcall* tLoadFile)(
         void* thisPtr,
@@ -51,6 +58,7 @@ namespace ESLHooks {
     extern tSaveFormID    g_SaveFormID;
     extern tSetFormID     g_SetFormID;
     extern tLoadFile      g_LoadFile;
+    extern tSaveLoadResolveFormID g_SaveLoadResolveFormID;
 
     // ── Hook implementations ──────────────────────────────────────────────────
 
@@ -58,6 +66,7 @@ namespace ESLHooks {
     void __fastcall SaveFormID_Hook(void* thisPtr, void* edx, void* src, UInt32 size);
     void __fastcall SetFormID_Hook(TESForm* form, void* edx, UInt32 newID, bool releaseOld);
     int  __fastcall LoadFile_Hook(void* thisPtr, void* edx, void* tesFile, char flag);
+    int  __fastcall SaveLoadResolveFormID_Hook(void* saveLoad, void* edx, int formID);
 
     // ── Setup ──────────────────────────────────────────────────────────────────
 

@@ -1,5 +1,4 @@
 #pragma once
-#pragma once
 #include <string>
 #include <unordered_map>
 #include <cstdint>
@@ -21,6 +20,11 @@ public:
     void     RegisterRuntimeMapping(uint8_t modIndex, uint16_t eslIndex);
     bool     HasRuntimeMapping(uint8_t modIndex) const;
     uint16_t GetRuntimeESLIndex(uint8_t modIndex) const;
+
+    // True if this ESL index belongs to a plugin loaded in THIS session.
+    // Distinct from IsIndexValid(), which only says the index appears in the
+    // persistent map -- that stays true for plugins the user has since removed.
+    bool     IsESLIndexActive(uint16_t eslIndex) const;
 
     // FormID encoding/decoding
     uint32_t Encode(uint16_t eslIndex, uint32_t localID) const;
@@ -67,6 +71,11 @@ private:
     // Fast flat arrays for runtime modIndex lookup — no map overhead
     uint16_t m_runtimeMapping[256];
     bool     m_hasMapping[256];
+
+    // Reverse direction: ESL index -> loaded this session. Needed by
+    // SaveLoad_ResolveFormID_Hook, which runs per FormID while a save loads,
+    // so a linear scan of m_runtimeMapping would not do.
+    bool     m_activeIndex[kMaxESL];
 
     bool m_dirty = false; // deferred save flag
 };

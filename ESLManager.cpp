@@ -52,6 +52,7 @@ ESLManager::ESLManager()
     // Initialize flat arrays — no unordered_map overhead at runtime
     memset(m_runtimeMapping, 0, sizeof(m_runtimeMapping));
     memset(m_hasMapping, 0, sizeof(m_hasMapping));
+    memset(m_activeIndex, 0, sizeof(m_activeIndex));
 }
 
 ESLManager& ESLManager::Get()
@@ -119,6 +120,9 @@ void ESLManager::RegisterRuntimeMapping(uint8_t modIndex, uint16_t eslIndex)
     m_runtimeMapping[modIndex] = eslIndex;
     m_hasMapping[modIndex] = true;
 
+    if (eslIndex < kMaxESL)
+        m_activeIndex[eslIndex] = true;
+
     _MESSAGE("[ESLManager] Runtime map: modIndex %02X -> ESL %u",
         modIndex, eslIndex);
 }
@@ -131,6 +135,11 @@ bool ESLManager::HasRuntimeMapping(uint8_t modIndex) const
 uint16_t ESLManager::GetRuntimeESLIndex(uint8_t modIndex) const
 {
     return m_hasMapping[modIndex] ? m_runtimeMapping[modIndex] : 0;
+}
+
+bool ESLManager::IsESLIndexActive(uint16_t eslIndex) const
+{
+    return eslIndex < kMaxESL && m_activeIndex[eslIndex];
 }
 
 // ── FormID encoding ───────────────────────────────────────────────────────────
