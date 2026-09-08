@@ -130,7 +130,9 @@
       </ForcedIncludeFiles>
     </ClCompile>
     <ClCompile Include="ESLHooks.cpp" />
+    <ClCompile Include="ESLLoadPatch.cpp" />
     <ClCompile Include="ESLManager.cpp" />
+    <ClCompile Include="ESLSerialization.cpp" />
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -152,7 +154,9 @@
     <ClInclude Include="..\obse\obse\Utilities.h" />
     <ClInclude Include="..\obse\obse_common\SafeWrite.h" />
     <ClInclude Include="ESLHooks.h" />
+    <ClInclude Include="ESLLoadPatch.h" />
     <ClInclude Include="ESLManager.h" />
+    <ClInclude Include="ESLSerialization.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\obse\obse\GameRTTI_1_2_416.inl" />

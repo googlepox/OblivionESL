@@ -1,5 +1,6 @@
 #include "ESLHooks.h"
 #include "ESLManager.h"
+#include "ESLLoadPatch.h"
 #include "obse/GameForms.h"
 #include "obse/GameObjects.h"
 #include "obse/GameData.h"
@@ -15,10 +16,21 @@ namespace ESLHooks {
     tResolveFormID g_ResolveFormID = nullptr;
     tSaveFormID    g_SaveFormID = nullptr;
     tSetFormID     g_SetFormID = nullptr;
-    tLoadFile      g_LoadFile = nullptr;
     tSaveLoadResolveFormID g_SaveLoadResolveFormID = nullptr;
+    tRemapSavedFormID g_RemapSavedFormID = nullptr;
+    tIsFormIDCreated g_IsFormIDCreated = nullptr;
+    tIRefToFormID g_IRefToFormID = nullptr;
 
     constexpr UInt32 kESLFlag = 0x00080000;
+
+    // TESFile_GetMasterByIndex(file, oneBasedIndex) -> ModEntry::Data* or null.
+    // Same function TESForm_ResolveFormID calls. Needed to identify WHICH file
+    // a reference targets, since vanilla only tells us the resulting index byte.
+    // TODO: address from IDA.
+    typedef ModEntry::Data* (__fastcall* tGetMasterByIndex)(
+        ModEntry::Data* file, void* edx, UInt32 index);
+
+    tGetMasterByIndex GetMasterByIndex = (tGetMasterByIndex)0x0044FD60;
 
     namespace ESLDetour
     {
@@ -67,29 +79,6 @@ namespace ESLHooks {
     }
 
     // ── Shared helpers ──────────────────────────────────────────────────────────
-
-    // DataHandler::modsByID[0xFF] is indexed by modIndex — this is the correct
-    // way to resolve a ModEntry::Data* back to its runtime modIndex.
-    // (file->idx is NOT the load-order index — it's the master count, per the
-    // OBSE header comment. Do not use it for this purpose.)
-    static UInt8 GetModIndex(ModEntry::Data* file)
-    {
-        if (!g_dataHandler || !*g_dataHandler)
-            return 0xFF;
-
-        DataHandler* dh = *g_dataHandler;
-
-        for (UInt32 i = 0; i < dh->numLoadedMods; i++)
-        {
-            if (dh->modsByID[i] == file)
-                return (UInt8)i;
-        }
-
-        _WARNING("[ESL] GetModIndex: '%s' not found in modsByID",
-            file->name ? file->name : "<null>");
-
-        return 0xFF;
-    }
 
     // Detection is by header flag, NOT by file extension.
     //
@@ -140,13 +129,19 @@ namespace ESLHooks {
         return (flags & kESLFlag) != 0;
     }
 
-    // Results are cached by file pointer. LoadFile_Hook only asks once per
-    // plugin, but SetFormID_Hook's lazy fallback can ask on any form -- and
-    // doing disk I/O per form is exactly the kind of per-record cost that
-    // caused the original load freeze.
+    // Results are cached by file pointer. ESLLoadPatch asks once per plugin,
+    // but this can also be reached per form -- and disk I/O per form is exactly
+    // the kind of per-record cost that caused the original load freeze.
     static std::unordered_map<ModEntry::Data*, bool> s_eslCache;
 
-    static bool IsESLFile(ModEntry::Data* file)
+    void ClearESLCache()
+    {
+        s_eslCache.clear();
+
+        _MESSAGE("[ESL] IsESLFile cache cleared.");
+    }
+
+    bool IsESLFile(ModEntry::Data* file)
     {
         if (!file)
             return false;
@@ -211,32 +206,47 @@ namespace ESLHooks {
         if (ESLManager::Get().IsEncoded(*formID))
             return;
 
+        UInt8 originalHighByte = (*formID >> 24) & 0xFF;
+
         g_ResolveFormID(formID, file);
 
-        UInt8 modIndex = (*formID >> 24) & 0xFF;
-        ESLManager& manager = ESLManager::Get();
+        // Vanilla stamps the target file's index into the high byte. For an ESL
+        // that index is 0xFE -- but bits 12-23, which say WHICH ESL, are left as
+        // whatever the on-disk local ID had there. Since compacted local IDs are
+        // always below 0x1000, those bits are always zero, so every ESL reference
+        // would resolve to ESL 0 without this.
+        if ((*formID >> 24) != 0xFE)
+            return;
 
-        if (manager.HasRuntimeMapping(modIndex))
+        // Work out which file vanilla resolved to, the same way it did.
+        ModEntry::Data* target = nullptr;
+
+        if (file && GetMasterByIndex)
+            target = GetMasterByIndex(file, nullptr, originalHighByte + 1);
+
+        if (!target)
+            target = file;   // no such master: vanilla used the file itself
+
+        UInt16 eslIndex = ESLManager::Get().GetESLIndexForFile(target);
+
+        if (eslIndex == ESLManager::kInvalid)
         {
-            UInt16 eslIndex = manager.GetRuntimeESLIndex(modIndex);
-            UInt32 localID = *formID & 0x00FFFFFF;
-
-            // Reject BOTH ends of the range. An ID below 0x800 means the
-            // plugin was not compacted correctly, and encoding it anyway
-            // would produce a form the engine cannot resolve.
-            if (!ESLManager::IsValidLocalID(localID))
-            {
-                _ERROR(
-                    "ResolveFormID: ESL form 0x%08X has localID 0x%X outside "
-                    "the valid 0x%X-0x%X range!",
-                    *formID, localID,
-                    ESLManager::kMinLocalID, ESLManager::kMaxLocalID
-                );
-                return;
-            }
-
-            *formID = 0xFE000000 | ((UInt32)eslIndex << 12) | (localID & 0x0FFF);
+            _WARNING("[ESL] ResolveFormID: 0x%08X resolved to 0xFE but target "
+                "'%s' is not a registered ESL",
+                *formID, (target && target->name) ? target->name : "<null>");
+            return;
         }
+
+        UInt32 localID = *formID & 0x0FFF;
+
+        if (!ESLManager::IsValidLocalID(localID))
+        {
+            _ERROR("[ESL] ResolveFormID: local ID 0x%X outside 0x%X-0x%X",
+                localID, ESLManager::kMinLocalID, ESLManager::kMaxLocalID);
+            return;
+        }
+
+        *formID = 0xFE000000 | ((UInt32)eslIndex << 12) | localID;
     }
 
     // ── SaveFormID ──────────────────────────────────────────────────────────────
@@ -279,10 +289,24 @@ namespace ESLHooks {
 
     // ── SetFormID ───────────────────────────────────────────────────────────────
     //
-    // Registration normally happens in LoadFile_Hook before any records from
-    // that file are processed. This lazy fallback only fires if SetFormID is
-    // somehow reached before that registration completes.
 
+    // Validation only -- this must NOT rewrite the ESL index.
+    //
+    // ResolveFormID_Hook has already produced the correct FormID by the time a
+    // form reaches here, for both cases:
+    //   - a record the ESL defines      -> its own ESL index
+    //   - an override of another ESL    -> the MASTER's ESL index
+    //
+    // An earlier version re-stamped the index from g_currentLoadingESL. That
+    // silently broke the second case: an override of an ESL record also arrives
+    // with high byte 0xFE, so it was misattributed to the plugin doing the
+    // overriding and stopped overriding anything.
+    //
+    // For the same reason there is no "was this resolved?" check here. A form
+    // arriving as 0xFE000xxx is legitimately either an ESL 0 record or an
+    // override of one, and nothing at this point distinguishes those from an
+    // unresolved form. Comparing against the loading plugin's index gives a
+    // false positive on every override of ESL 0.
     void __fastcall SetFormID_Hook(
         TESForm* form,
         void*,
@@ -290,120 +314,133 @@ namespace ESLHooks {
         bool releaseOld
     )
     {
-        if (!form)
+        if ((newID >> 24) == 0xFE)
         {
-            g_SetFormID(form, nullptr, newID, releaseOld);
-            return;
-        }
-
-        UInt8 modIndex = (newID >> 24) & 0xFF;
-        ESLManager& manager = ESLManager::Get();
-
-        if (!manager.HasRuntimeMapping(modIndex))
-        {
-            if (!g_dataHandler || !*g_dataHandler)
-            {
-                g_SetFormID(form, nullptr, newID, releaseOld);
-                return;
-            }
-
-            DataHandler* dh = *g_dataHandler;
-
-            if (modIndex < dh->numLoadedMods)
-            {
-                ModEntry::Data* file = dh->modsByID[modIndex];
-
-                if (file && IsESLFile(file))
-                {
-                    UInt16 eslIndex = manager.GetOrRegisterESLIndex(file->name);
-
-                    if (eslIndex != ESLManager::kInvalid)
-                        manager.RegisterRuntimeMapping(modIndex, eslIndex);
-                }
-            }
-        }
-
-        if (manager.HasRuntimeMapping(modIndex))
-        {
-            UInt16 eslIndex = manager.GetRuntimeESLIndex(modIndex);
-            UInt32 localID = newID & 0x00FFFFFF;
+            UInt32 localID = newID & 0x0FFF;
 
             if (!ESLManager::IsValidLocalID(localID))
             {
-                _ERROR(
-                    "[ESL] SetFormID: form %08X in '%s' has localID 0x%X outside "
-                    "the valid 0x%X-0x%X range - plugin was not compacted "
-                    "correctly!",
-                    newID,
-                    (*g_dataHandler)->GetNthModName(modIndex),
-                    localID,
-                    ESLManager::kMinLocalID,
-                    ESLManager::kMaxLocalID
-                );
-
-                // Pass through unmodified - better to load into the wrong slot
-                // than to silently alias onto a different form.
-                g_SetFormID(form, nullptr, newID, releaseOld);
-                return;
+                _ERROR("[ESL] SetFormID: form %08X has local ID 0x%X outside "
+                    "0x%X-0x%X - plugin was not compacted correctly!",
+                    newID, localID,
+                    ESLManager::kMinLocalID, ESLManager::kMaxLocalID);
             }
-
-            newID = 0xFE000000 | ((UInt32)eslIndex << 12) | (localID & 0x0FFF);
         }
 
         g_SetFormID(form, nullptr, newID, releaseOld);
     }
 
-    // ── LoadFile ────────────────────────────────────────────────────────────────
+    // ── TESDataHandler_IsFormIDCreated ──────────────────────────────────────────
     //
-    // Primary ESL detection/registration point. Runs vanilla load first so
-    // the file is present in DataHandler's modsByID before we scan for its
-    // modIndex.
+    // Vanilla tests only for high byte 0xFF. Across 39 call sites this function
+    // is used as an "already absolute, skip remapping" guard -- and an ESL
+    // FormID has exactly that property, since 0xFE forms carry their own index
+    // and are never translated through the save's mod table.
+    //
+    // Without this, every one of those guards falls through to a table lookup
+    // that uses the FormID as an INDEX. sub_459950 was one such site; hooking
+    // it individually fixed some cases but left others (an actor's saved AI
+    // package, for one), which is what makes the single shared hook the right
+    // level to fix this at.
+    //
+    // CAVEAT worth remembering: not every caller means "already absolute". At
+    // least one in TESSaveLoadGame_LoadGame uses it to gate whether a form gets
+    // RESET, and returning true there changes behaviour for ESL forms rather
+    // than just preserving them. If something ESL-specific misbehaves on load
+    // that is not a missing-form problem, this is the first place to look.
 
-    int __fastcall LoadFile_Hook(
-        void* thisPtr,
-        void*,
-        void* tesFile,
-        char flag
-    )
+    bool __stdcall IsFormIDCreated_Hook(UInt32 formID)
     {
-        int result = g_LoadFile(thisPtr, nullptr, tesFile, flag);
+        if ((formID >> 24) == 0xFE)
+            return true;
 
-        if (!result || !tesFile)
-            return result;
+        return g_IsFormIDCreated(formID);
+    }
 
-        ModEntry::Data* file = (ModEntry::Data*)tesFile;
+    // ── Saved ESL FormID translation ────────────────────────────────────────────
+    //
+    // Shared by both save-load remapping paths. A saved FormID carries the ESL
+    // index its plugin had when the save was written; the cosave record lets us
+    // translate that to the current one. Returns 0 for a plugin that is no
+    // longer loaded, matching what vanilla does for any missing mod.
 
-        if (!IsESLFile(file))
-            return result;
-
+    static UInt32 TranslateSavedESLFormID(UInt32 formID)
+    {
         ESLManager& manager = ESLManager::Get();
 
-        UInt8 modIndex = GetModIndex(file);
+        UInt16 savedIndex = manager.DecodeIndex(formID);
+        UInt16 eslIndex = manager.RemapSavedIndex(savedIndex);
 
-        if (modIndex == 0xFF)
+        if (eslIndex == ESLManager::kInvalid ||
+            !manager.IsESLIndexActive(eslIndex))
         {
-            _ERROR("[ESL] LoadFile: could not determine modIndex for '%s', skipping",
-                file->name);
-            return result;
+            return 0;
         }
 
-        if (manager.HasRuntimeMapping(modIndex))
-            return result; // already registered
+        if (eslIndex == savedIndex)
+            return formID;
 
-        UInt16 eslIndex = manager.GetOrRegisterESLIndex(file->name);
+        return 0xFE000000
+            | ((UInt32)eslIndex << 12)
+            | (formID & 0x0FFF);
+    }
 
-        if (eslIndex == ESLManager::kInvalid)
-        {
-            _ERROR("[ESL] LoadFile: registration failed for '%s'", file->name);
-            return result;
-        }
+    // ── SaveLoad_IRefToFormID (0x0045E0D0) ──────────────────────────────────────
+    //
+    // DIAGNOSTIC ONLY -- currently passes everything through unchanged.
+    //
+    // This is the save side of the iref table: it looks a FormID up in the
+    // table at +0x74 and returns its index, appending a new entry if absent.
+    // sub_459950 is the read side of the same table, index -> FormID.
+    //
+    // Why we are here: on load, three dropped ESL items resolved their base
+    // form through index 0x1920/0x1921/0x1923 and got 0 back, while the table
+    // count was 0x1926 -- so the indices are in range and the ENTRIES are zero.
+    // The FormIDs themselves are present in the .ess, so something between the
+    // write here and the read there is losing them.
+    //
+    // This logs what index each ESL FormID is assigned at save time, so the two
+    // sides can be compared.
 
-        manager.RegisterRuntimeMapping(modIndex, eslIndex);
+    UInt32 __fastcall IRefToFormID_Hook(
+        void* saveLoad,
+        void*,
+        UInt32 formID
+    )
+    {
+        UInt32 index = g_IRefToFormID(saveLoad, nullptr, formID);
 
-        _MESSAGE("[ESL] Loaded: %s (modIndex %02X -> ESL slot %u)",
-            file->name, modIndex, eslIndex);
+        return index;
+    }
 
-        return result;
+    // ── SaveLoad_RemapSavedFormID (sub_459950) ──────────────────────────────────
+    //
+    // Vanilla:
+    //
+    //   if (TESDataHandler_IsFormIDCreated(formID)) return formID;
+    //   table = this->+0x74;
+    //   if (formID <= table->count) return table->entries[formID];
+    //   return 0;
+    //
+    // IsFormIDCreated only tests for high byte 0xFF, so an ESL FormID falls
+    // through to the table lookup -- where it is used as an INDEX. 0xFE003800
+    // is far past any plausible count, so it returns 0 and the form is dropped
+    // silently, with no error printed. That is what removes equipped ESL items
+    // on load.
+    //
+    // ESL FormIDs are already absolute, exactly like created forms, so they get
+    // the same passthrough 0xFF receives.
+
+    UInt32 __fastcall RemapSavedFormID_Hook(
+        void* saveLoad,
+        void*,
+        UInt32 formID
+    )
+    {
+        if ((formID >> 24) == 0xFE)
+            return TranslateSavedESLFormID(formID);
+
+        return g_RemapSavedFormID(saveLoad, nullptr, formID);
     }
 
     // ── SaveLoad_ResolveFormID ──────────────────────────────────────────────────
@@ -440,28 +477,94 @@ namespace ESLHooks {
         {
             ESLManager& manager = ESLManager::Get();
 
-            UInt16 eslIndex = manager.DecodeIndex((UInt32)formID);
-
-            if (!manager.IsESLIndexActive(eslIndex))
-            {
-                // Plugin was in the save but is not loaded now. Same answer
-                // vanilla gives for any missing mod.
-                return 0;
-            }
-
-            return formID;
+            return (int)TranslateSavedESLFormID((UInt32)formID);
         }
 
         return g_SaveLoadResolveFormID(saveLoad, nullptr, formID);
     }
 
+    // ── Iref table reader (sub_45E3D0) ──────────────────────────────────────────
+    //
+    // This function reads the iref table back from the save file, and it has
+    // SaveLoad_ResolveFormID INLINED rather than calling it -- twice, once per
+    // table. That is why hooking SaveLoad_ResolveFormID never affected these,
+    // and why no SaveResolve lines appeared for the FormIDs that went missing.
+    //
+    // Vanilla, at 0x0045E48B and again at 0x0045E57B:
+    //
+    //   test edx, edx                  ; modRefIDTable
+    //   jz   passthrough
+    //   cmp  al, 0FFh                  ; high byte
+    //   jz   passthrough
+    //   cmp  al, [ebp+48h]             ; >= numMods?
+    //   jnb  zero                      ; <-- 0xFE lands here
+    //   ...
+    //
+    // 0xFE is always >= numMods, so every ESL FormID read back from the save
+    // became 0 and was stored as 0 in the table. Later lookups by index then
+    // returned 0, which is what removed dropped items, unequipped armour and
+    // lost the AI package.
+
+    UInt32 __stdcall ResolveSavedIref(void* saveLoad, UInt32 formID)
+    {
+        if ((formID >> 24) == 0xFE)
+            return TranslateSavedESLFormID(formID);
+
+        // Anything else gets vanilla's own logic, via the trampoline.
+        return (UInt32)g_SaveLoadResolveFormID(saveLoad, nullptr, (int)formID);
+    }
+
+    // ecx = raw FormID, ebp = TESSaveLoad. Only eax is live on exit; ecx and
+    // edx are both reloaded before their next use, and a __stdcall callee
+    // preserves ebx/esi/edi/ebp -- so no pushad is needed.
+    static const UInt32 kIrefBlock1Return = 0x0045E4B9;
+    static const UInt32 kIrefBlock2Return = 0x0045E5A9;
+
+    __declspec(naked) void IrefBlock1_Stub()
+    {
+        __asm
+        {
+            push    ecx             // formID
+            push    ebp             // saveLoad
+            call    ResolveSavedIref
+            jmp     kIrefBlock1Return
+        }
+    }
+
+    __declspec(naked) void IrefBlock2_Stub()
+    {
+        __asm
+        {
+            push    ecx             // formID
+            push    ebp             // saveLoad
+            call    ResolveSavedIref
+            jmp     kIrefBlock2Return
+        }
+    }
+
+    static bool WriteJump(UInt32 address, void* target, UInt32 patchSize)
+    {
+        if (patchSize < 5)
+            return false;
+
+        DWORD oldProtect;
+        VirtualProtect((void*)address, patchSize, PAGE_EXECUTE_READWRITE, &oldProtect);
+
+        *(UInt8*)address = 0xE9;
+        *(UInt32*)(address + 1) = (UInt32)target - (address + 5);
+
+        for (UInt32 i = 5; i < patchSize; i++)
+            *(UInt8*)(address + i) = 0x90;
+
+        VirtualProtect((void*)address, patchSize, oldProtect, &oldProtect);
+        return true;
+    }
+
     // ── Hook installation ──────────────────────────────────────────────────────
     //
-    // Note: InitializeFormFromRecord and LoadFormID hooks were removed.
-    // InitializeFormFromRecord fires per-record (tens of thousands of times
-    // per load) and duplicated detection that LoadFile_Hook already does
-    // once per file — this was the primary cause of the load freeze.
-    // LoadFormID was a pure passthrough with no logic.
+    // Note: the LoadFile hook was removed. Registration now happens in
+    // ESLLoadPatch::AppendFile, which sees every plugin before any of them
+    // load -- so ordering between an ESL and its dependents no longer matters.
 
     bool InstallHooks()
     {
@@ -504,19 +607,6 @@ namespace ESLHooks {
             return false;
         }
 
-        g_LoadFile =
-            (tLoadFile)ESLDetour::WriteDetour(
-                (void*)0x0044F0C0,
-                LoadFile_Hook,
-                6
-            );
-
-        if (!g_LoadFile)
-        {
-            _ERROR("LoadFile hook failed!");
-            return false;
-        }
-
         // 0x00452180, 8 bytes. Verified against the disassembly:
         //   00452180  8B 51 4C     mov  edx, [ecx+4Ch]
         //   00452183  56           push esi
@@ -534,6 +624,73 @@ namespace ESLHooks {
         if (!g_SaveLoadResolveFormID)
         {
             _ERROR("SaveLoad_ResolveFormID hook failed!");
+            return false;
+        }
+
+        // 0x00459950, 5 bytes:
+        //   00459950  56           push esi
+        //   00459951  8B 74 24 08  mov  esi, [esp+8]
+        // Two whole instructions, no branches.
+        g_RemapSavedFormID =
+            (tRemapSavedFormID)ESLDetour::WriteDetour(
+                (void*)0x00459950,
+                RemapSavedFormID_Hook,
+                5
+            );
+
+        if (!g_RemapSavedFormID)
+        {
+            _ERROR("RemapSavedFormID hook failed!");
+            return false;
+        }
+
+        // 0x00446B80, 8 bytes:
+        //   00446B80  81 7C 24 04 00 00 00 FF  cmp [esp+4], 0FF000000h
+        // One whole instruction, no branches. Vanilla is only 14 bytes total:
+        //   cmp [esp+4], 0FF000000h / sbb eax, eax / add eax, 1 / retn 4
+        // which returns true for formID >= 0xFF000000.
+        g_IsFormIDCreated =
+            (tIsFormIDCreated)ESLDetour::WriteDetour(
+                (void*)0x00446B80,
+                IsFormIDCreated_Hook,
+                8
+            );
+
+        if (!g_IsFormIDCreated)
+        {
+            _ERROR("IsFormIDCreated hook failed!");
+            return false;
+        }
+
+        // 0x0045E0D0, 5 bytes:
+        //   0045E0D0  53           push ebx
+        //   0045E0D1  8B 5C 24 08  mov  ebx, [esp+8]
+        // Two whole instructions, no branches.
+        g_IRefToFormID =
+            (tIRefToFormID)ESLDetour::WriteDetour(
+                (void*)0x0045E0D0,
+                IRefToFormID_Hook,
+                5
+            );
+
+        if (!g_IRefToFormID)
+        {
+            _ERROR("IRefToFormID hook failed!");
+            return false;
+        }
+
+        // The two inlined resolve blocks in sub_45E3D0, 46 bytes each.
+        //   Block 1: 0x0045E48B -> 0x0045E4B9  (table at +0x74)
+        //   Block 2: 0x0045E57B -> 0x0045E5A9  (table at +0x78)
+        if (!WriteJump(0x0045E48B, IrefBlock1_Stub, 0x2E))
+        {
+            _ERROR("Iref block 1 patch failed!");
+            return false;
+        }
+
+        if (!WriteJump(0x0045E57B, IrefBlock2_Stub, 0x2E))
+        {
+            _ERROR("Iref block 2 patch failed!");
             return false;
         }
 

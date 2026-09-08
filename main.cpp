@@ -6,6 +6,8 @@
 
 #include "ESLManager.h"
 #include "ESLHooks.h"
+#include "ESLLoadPatch.h"
+#include "ESLSerialization.h"
 
 #include <shlobj.h>
 #include <string>
@@ -33,6 +35,9 @@ void MessageHandler(OBSEMessagingInterface::Message* msg)
     case OBSEMessagingInterface::kMessage_ExitGame:
     case OBSEMessagingInterface::kMessage_ExitToMainMenu:
         ESLManager::Get().SavePersistentMap();
+        ESLManager::Get().ClearRuntimeState();   // m_fileToIndex, m_activeIndex
+        ESLLoadPatch::ClearFileList();           // s_eslFiles
+        ESLHooks::ClearESLCache();
         break;
 
     default:
@@ -103,7 +108,21 @@ extern "C" {
             return false;
         }
 
-        // 3. Messaging is optional -- it is only used to flush the map to disk.
+        // 3. Patch the load order handling so ESL plugins never consume one of
+        //    the 255 slots. Must come after the hooks: AppendFile calls
+        //    ESLHooks::IsESLFile.
+        if (!ESLLoadPatch::InstallPatches())
+        {
+            _ERROR("Load order patches failed, aborting.");
+            return false;
+        }
+
+        // 4. Cosave serialization. The vanilla save records its plugin list from
+        //    modsByID, which ESLs are not in, so without this every ESL-sourced
+        //    form looks orphaned on load.
+        ESLSerialization::Register(obse, g_pluginHandle);
+
+        // 5. Messaging is optional -- it is only used to flush the map to disk.
         g_messaging = (OBSEMessagingInterface*)obse->QueryInterface(kInterface_Messaging);
 
         if (g_messaging)

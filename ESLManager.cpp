@@ -50,9 +50,9 @@ namespace {
 ESLManager::ESLManager()
 {
     // Initialize flat arrays — no unordered_map overhead at runtime
-    memset(m_runtimeMapping, 0, sizeof(m_runtimeMapping));
-    memset(m_hasMapping, 0, sizeof(m_hasMapping));
     memset(m_activeIndex, 0, sizeof(m_activeIndex));
+
+    ResetSaveRemap();
 }
 
 ESLManager& ESLManager::Get()
@@ -113,33 +113,60 @@ bool ESLManager::IsIndexValid(uint16_t index) const
     return m_indexToName.count(index) != 0;
 }
 
+const char* ESLManager::GetESLName(uint16_t eslIndex) const
+{
+    auto it = m_indexToName.find(eslIndex);
+    return (it != m_indexToName.end()) ? it->second.c_str() : nullptr;
+}
+
 // ── Runtime modIndex mapping ──────────────────────────────────────────────────
 
-void ESLManager::RegisterRuntimeMapping(uint8_t modIndex, uint16_t eslIndex)
+void ESLManager::RegisterFile(void* file, uint16_t eslIndex)
 {
-    m_runtimeMapping[modIndex] = eslIndex;
-    m_hasMapping[modIndex] = true;
+    if (!file || eslIndex >= kMaxESL)
+        return;
 
-    if (eslIndex < kMaxESL)
-        m_activeIndex[eslIndex] = true;
-
-    _MESSAGE("[ESLManager] Runtime map: modIndex %02X -> ESL %u",
-        modIndex, eslIndex);
+    m_fileToIndex[file] = eslIndex;
+    m_activeIndex[eslIndex] = true;
 }
 
-bool ESLManager::HasRuntimeMapping(uint8_t modIndex) const
+void ESLManager::ClearRuntimeState()
 {
-    return m_hasMapping[modIndex];
+    m_fileToIndex.clear();
+    memset(m_activeIndex, 0, sizeof(m_activeIndex));
+
+    _MESSAGE("[ESLManager] Runtime file state cleared.");
 }
 
-uint16_t ESLManager::GetRuntimeESLIndex(uint8_t modIndex) const
+uint16_t ESLManager::GetESLIndexForFile(void* file) const
 {
-    return m_hasMapping[modIndex] ? m_runtimeMapping[modIndex] : 0;
+    if (!file)
+        return kInvalid;
+
+    auto it = m_fileToIndex.find(file);
+    return (it != m_fileToIndex.end()) ? it->second : kInvalid;
 }
 
 bool ESLManager::IsESLIndexActive(uint16_t eslIndex) const
 {
     return eslIndex < kMaxESL && m_activeIndex[eslIndex];
+}
+
+void ESLManager::ResetSaveRemap()
+{
+    for (uint16_t i = 0; i < kMaxESL; i++)
+        m_saveRemap[i] = i;
+}
+
+void ESLManager::SetSaveRemap(uint16_t savedIndex, uint16_t currentIndex)
+{
+    if (savedIndex < kMaxESL)
+        m_saveRemap[savedIndex] = currentIndex;
+}
+
+uint16_t ESLManager::RemapSavedIndex(uint16_t savedIndex) const
+{
+    return (savedIndex < kMaxESL) ? m_saveRemap[savedIndex] : kInvalid;
 }
 
 // ── FormID encoding ───────────────────────────────────────────────────────────

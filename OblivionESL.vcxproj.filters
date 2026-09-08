@@ -55,6 +55,8 @@
     </ClCompile>
     <ClCompile Include="ESLHooks.cpp" />
     <ClCompile Include="ESLManager.cpp" />
+    <ClCompile Include="ESLLoadPatch.cpp" />
+    <ClCompile Include="ESLSerialization.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\obse\obse\GameActorValues.h">
@@ -110,6 +112,8 @@
     </ClInclude>
     <ClInclude Include="ESLManager.h" />
     <ClInclude Include="ESLHooks.h" />
+    <ClInclude Include="ESLLoadPatch.h" />
+    <ClInclude Include="ESLSerialization.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\obse\obse\GameRTTI_1_2_416.inl">
