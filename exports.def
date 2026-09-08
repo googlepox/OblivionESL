@@ -1,0 +1,4 @@
+LIBRARY	"OblivionESL"
+EXPORTS
+OBSEPlugin_Query
+OBSEPlugin_Load
