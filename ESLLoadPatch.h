@@ -1,5 +1,6 @@
 #pragma once
 #include "obse/GameData.h"
+#include <vector>
 
 namespace ESLLoadPatch {
 
@@ -18,6 +19,10 @@ namespace ESLLoadPatch {
 
     // Number of ESL plugins deferred out of the normal load order.
     UInt32 GetESLCount();
+
+    // The deferred ESL files, for code that needs to do per-file work the
+    // engine would normally do by iterating modsByID -- which ESLs are not in.
+    std::vector<ModEntry::Data*> GetESLFiles();
 
     // Drops the deferred ESL list. Call on teardown -- the engine frees its
     // ModEntry::Data objects when returning to the main menu, and every entry

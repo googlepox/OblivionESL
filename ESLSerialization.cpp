@@ -69,6 +69,11 @@ namespace ESLSerialization {
         _MESSAGE("[ESL] Wrote %u ESL entries to cosave", count);
     }
 
+    void PreLoadCallback(void*)
+    {
+        return;
+    }
+
     void LoadCallback(void*)
     {
         if (!g_serialization)
@@ -159,6 +164,7 @@ namespace ESLSerialization {
 
         g_serialization->SetSaveCallback(handle, SaveCallback);
         g_serialization->SetLoadCallback(handle, LoadCallback);
+        //g_serialization->SetPreloadCallback(handle, PreLoadCallback);
 
         _MESSAGE("[ESL] Serialization callbacks registered.");
     }

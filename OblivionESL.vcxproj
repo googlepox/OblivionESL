@@ -129,6 +129,7 @@
       <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
       </ForcedIncludeFiles>
     </ClCompile>
+    <ClCompile Include="ESLAPI.cpp" />
     <ClCompile Include="ESLHooks.cpp" />
     <ClCompile Include="ESLLoadPatch.cpp" />
     <ClCompile Include="ESLManager.cpp" />
@@ -153,6 +154,7 @@
     <ClInclude Include="..\obse\obse\Script.h" />
     <ClInclude Include="..\obse\obse\Utilities.h" />
     <ClInclude Include="..\obse\obse_common\SafeWrite.h" />
+    <ClInclude Include="ESLAPI.h" />
     <ClInclude Include="ESLHooks.h" />
     <ClInclude Include="ESLLoadPatch.h" />
     <ClInclude Include="ESLManager.h" />

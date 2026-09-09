@@ -37,9 +37,6 @@ namespace ESLHooks {
         bool releaseOld
         );
 
-    // bool __stdcall TESDataHandler_IsFormIDCreated(UInt32 formID)
-    // Note __stdcall, not __cdecl -- it ends in "retn 4", so the callee cleans.
-    typedef bool(__stdcall* tIsFormIDCreated)(UInt32 formID);
 
     // UInt32 __thiscall SaveLoad_IRefToFormID(TESSaveLoad* this, UInt32 formID)
     // (0x0045E0D0) -- the SAVE side of the iref table: FormID -> index,
@@ -73,7 +70,6 @@ namespace ESLHooks {
     extern tSetFormID     g_SetFormID;
     extern tSaveLoadResolveFormID g_SaveLoadResolveFormID;
     extern tRemapSavedFormID g_RemapSavedFormID;
-    extern tIsFormIDCreated g_IsFormIDCreated;
     extern tIRefToFormID g_IRefToFormID;
 
     // ── Hook implementations ──────────────────────────────────────────────────
@@ -83,7 +79,6 @@ namespace ESLHooks {
     void __fastcall SetFormID_Hook(TESForm* form, void* edx, UInt32 newID, bool releaseOld);
     int  __fastcall SaveLoadResolveFormID_Hook(void* saveLoad, void* edx, int formID);
     UInt32 __fastcall RemapSavedFormID_Hook(void* saveLoad, void* edx, UInt32 formID);
-    bool __stdcall IsFormIDCreated_Hook(UInt32 formID);
     UInt32 __fastcall IRefToFormID_Hook(void* saveLoad, void* edx, UInt32 formID);
 
     // ── Helpers ────────────────────────────────────────────────────────────────

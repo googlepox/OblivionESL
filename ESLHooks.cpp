@@ -18,7 +18,6 @@ namespace ESLHooks {
     tSetFormID     g_SetFormID = nullptr;
     tSaveLoadResolveFormID g_SaveLoadResolveFormID = nullptr;
     tRemapSavedFormID g_RemapSavedFormID = nullptr;
-    tIsFormIDCreated g_IsFormIDCreated = nullptr;
     tIRefToFormID g_IRefToFormID = nullptr;
 
     constexpr UInt32 kESLFlag = 0x00080000;
@@ -330,33 +329,6 @@ namespace ESLHooks {
         g_SetFormID(form, nullptr, newID, releaseOld);
     }
 
-    // ── TESDataHandler_IsFormIDCreated ──────────────────────────────────────────
-    //
-    // Vanilla tests only for high byte 0xFF. Across 39 call sites this function
-    // is used as an "already absolute, skip remapping" guard -- and an ESL
-    // FormID has exactly that property, since 0xFE forms carry their own index
-    // and are never translated through the save's mod table.
-    //
-    // Without this, every one of those guards falls through to a table lookup
-    // that uses the FormID as an INDEX. sub_459950 was one such site; hooking
-    // it individually fixed some cases but left others (an actor's saved AI
-    // package, for one), which is what makes the single shared hook the right
-    // level to fix this at.
-    //
-    // CAVEAT worth remembering: not every caller means "already absolute". At
-    // least one in TESSaveLoadGame_LoadGame uses it to gate whether a form gets
-    // RESET, and returning true there changes behaviour for ESL forms rather
-    // than just preserving them. If something ESL-specific misbehaves on load
-    // that is not a missing-form problem, this is the first place to look.
-
-    bool __stdcall IsFormIDCreated_Hook(UInt32 formID)
-    {
-        if ((formID >> 24) == 0xFE)
-            return true;
-
-        return g_IsFormIDCreated(formID);
-    }
-
     // ── Saved ESL FormID translation ────────────────────────────────────────────
     //
     // Shared by both save-load remapping paths. A saved FormID carries the ESL
@@ -560,6 +532,23 @@ namespace ESLHooks {
         return true;
     }
 
+    typedef void(__fastcall* tDataHandlerClear)(void* dh, void* edx);
+    tDataHandlerClear g_DataHandlerClear = nullptr;
+
+    void __fastcall DataHandlerClear_Hook(void* dh, void*)
+    {
+        _MESSAGE("[ESL] === TESDataHandler_Clear === (numLoadedMods=%u)",
+            (*g_dataHandler)->numLoadedMods);
+
+
+        _MESSAGE("[ESL] OSGlobals+4 = %d", *((UInt8*)(*(UInt32*)0x00B33398) + 4));
+
+        g_DataHandlerClear(dh, nullptr);
+
+        _MESSAGE("[ESL] === Clear returned === (numLoadedMods=%u)",
+            (*g_dataHandler)->numLoadedMods);
+    }
+
     // ── Hook installation ──────────────────────────────────────────────────────
     //
     // Note: the LoadFile hook was removed. Registration now happens in
@@ -607,6 +596,19 @@ namespace ESLHooks {
             return false;
         }
 
+        g_DataHandlerClear =
+            (tDataHandlerClear)ESLDetour::WriteDetour(
+                (void*)0x004492E0,
+                DataHandlerClear_Hook,
+                5
+            );
+
+        if (!g_DataHandlerClear)
+        {
+            _ERROR("DataHandler_Clear hook failed!");
+            return false;
+        }
+
         // 0x00452180, 8 bytes. Verified against the disassembly:
         //   00452180  8B 51 4C     mov  edx, [ecx+4Ch]
         //   00452183  56           push esi
@@ -641,24 +643,6 @@ namespace ESLHooks {
         if (!g_RemapSavedFormID)
         {
             _ERROR("RemapSavedFormID hook failed!");
-            return false;
-        }
-
-        // 0x00446B80, 8 bytes:
-        //   00446B80  81 7C 24 04 00 00 00 FF  cmp [esp+4], 0FF000000h
-        // One whole instruction, no branches. Vanilla is only 14 bytes total:
-        //   cmp [esp+4], 0FF000000h / sbb eax, eax / add eax, 1 / retn 4
-        // which returns true for formID >= 0xFF000000.
-        g_IsFormIDCreated =
-            (tIsFormIDCreated)ESLDetour::WriteDetour(
-                (void*)0x00446B80,
-                IsFormIDCreated_Hook,
-                8
-            );
-
-        if (!g_IsFormIDCreated)
-        {
-            _ERROR("IsFormIDCreated hook failed!");
             return false;
         }
 

@@ -8,9 +8,11 @@
 #include "ESLHooks.h"
 #include "ESLLoadPatch.h"
 #include "ESLSerialization.h"
+#include "ESLApi.h"
 
 #include <shlobj.h>
 #include <string>
+#include <ESLReload.h>
 
 IDebugLog                   gLog("OblivionESL.log");
 
@@ -130,7 +132,11 @@ extern "C" {
         // 4. Cosave serialization. The vanilla save records its plugin list from
         //    modsByID, which ESLs are not in, so without this every ESL-sourced
         //    form looks orphaned on load.
-        ESLSerialization::Register(obse, g_pluginHandle);
+        //ESLSerialization::Register(obse, g_pluginHandle);
+
+        //    Let xOBSE resolve ESL plugins by name. Without this, any OBSE plugin
+        //    that looks a form up by mod name gets 0xFF back for every ESL.
+        ESLApi::Register();
 
         // 5. Messaging is optional -- it is only used to flush the map to disk.
         g_messaging = (OBSEMessagingInterface*)obse->QueryInterface(kInterface_Messaging);

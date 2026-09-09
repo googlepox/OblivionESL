@@ -61,6 +61,17 @@ namespace ESLLoadPatch {
 
     UInt32 GetESLCount() { return (UInt32)s_eslFiles.size(); }
 
+    std::vector<ModEntry::Data*> GetESLFiles()
+    {
+        std::vector<ModEntry::Data*> out;
+        out.reserve(s_eslFiles.size());
+
+        for (const ESLEntry& entry : s_eslFiles)
+            out.push_back(entry.file);
+
+        return out;
+    }
+
     void ClearFileList()
     {
         s_eslFiles.clear();
