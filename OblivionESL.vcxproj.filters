@@ -6,6 +6,17 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="dllmain.c" />
+    <ClCompile Include="main.cpp" />
+    <ClCompile Include="ESLHooks.cpp" />
+    <ClCompile Include="ESLManager.cpp" />
+    <ClCompile Include="ESLLoadPatch.cpp" />
+    <ClCompile Include="ESLSerialization.cpp" />
+    <ClCompile Include="ESLAPI.cpp" />
+    <ClCompile Include="ESLCommands.cpp" />
+    <ClCompile Include="..\obse\obse_common\SafeWrite.cpp">
+      <Filter>obse</Filter>
+    </ClCompile>
     <ClCompile Include="..\obse\obse\GameActorValues.cpp">
       <Filter>obse</Filter>
     </ClCompile>
@@ -27,10 +38,22 @@
     <ClCompile Include="..\obse\obse\GameObjects.cpp">
       <Filter>obse</Filter>
     </ClCompile>
+    <ClCompile Include="..\obse\obse\GameProcess.cpp">
+      <Filter>obse</Filter>
+    </ClCompile>
     <ClCompile Include="..\obse\obse\GameTasks.cpp">
       <Filter>obse</Filter>
     </ClCompile>
     <ClCompile Include="..\obse\obse\GameTypes.cpp">
+      <Filter>obse</Filter>
+    </ClCompile>
+    <ClCompile Include="..\obse\obse\Utilities.cpp">
+      <Filter>obse</Filter>
+    </ClCompile>
+    <ClCompile Include="..\obse\obse\ModTable.cpp">
+      <Filter>obse</Filter>
+    </ClCompile>
+    <ClCompile Include="..\obse\obse\Script.cpp">
       <Filter>obse</Filter>
     </ClCompile>
     <ClCompile Include="..\obse\obse\NiAPI.cpp">
@@ -39,27 +62,21 @@
     <ClCompile Include="..\obse\obse\NiNodes.cpp">
       <Filter>obse</Filter>
     </ClCompile>
-    <ClCompile Include="..\obse\obse\NiRTTI.cpp">
+    <ClCompile Include="..\obse\obse\NiObjects.cpp">
       <Filter>obse</Filter>
     </ClCompile>
-    <ClCompile Include="..\obse\obse\Script.cpp">
-      <Filter>obse</Filter>
-    </ClCompile>
-    <ClCompile Include="..\obse\obse\Utilities.cpp">
-      <Filter>obse</Filter>
-    </ClCompile>
-    <ClCompile Include="dllmain.c" />
-    <ClCompile Include="main.cpp" />
-    <ClCompile Include="..\obse\obse_common\SafeWrite.cpp">
-      <Filter>obse</Filter>
-    </ClCompile>
-    <ClCompile Include="ESLHooks.cpp" />
-    <ClCompile Include="ESLManager.cpp" />
-    <ClCompile Include="ESLLoadPatch.cpp" />
-    <ClCompile Include="ESLSerialization.cpp" />
-    <ClCompile Include="ESLAPI.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="ESLManager.h" />
+    <ClInclude Include="ESLHooks.h" />
+    <ClInclude Include="ESLLoadPatch.h" />
+    <ClInclude Include="ESLSerialization.h" />
+    <ClInclude Include="ESLAPI.h" />
+    <ClInclude Include="ESLInterface.h" />
+    <ClInclude Include="ESLCommands.h" />
+    <ClInclude Include="..\obse\obse_common\SafeWrite.h">
+      <Filter>obse</Filter>
+    </ClInclude>
     <ClInclude Include="..\obse\obse\GameActorValues.h">
       <Filter>obse</Filter>
     </ClInclude>
@@ -81,10 +98,22 @@
     <ClInclude Include="..\obse\obse\GameObjects.h">
       <Filter>obse</Filter>
     </ClInclude>
+    <ClInclude Include="..\obse\obse\GameProcess.h">
+      <Filter>obse</Filter>
+    </ClInclude>
     <ClInclude Include="..\obse\obse\GameTasks.h">
       <Filter>obse</Filter>
     </ClInclude>
     <ClInclude Include="..\obse\obse\GameTypes.h">
+      <Filter>obse</Filter>
+    </ClInclude>
+    <ClInclude Include="..\obse\obse\Utilities.h">
+      <Filter>obse</Filter>
+    </ClInclude>
+    <ClInclude Include="..\obse\obse\ModTable.h">
+      <Filter>obse</Filter>
+    </ClInclude>
+    <ClInclude Include="..\obse\obse\Script.h">
       <Filter>obse</Filter>
     </ClInclude>
     <ClInclude Include="..\obse\obse\NiAPI.h">
@@ -93,35 +122,11 @@
     <ClInclude Include="..\obse\obse\NiNodes.h">
       <Filter>obse</Filter>
     </ClInclude>
-    <ClInclude Include="..\obse\obse\NiRTTI.h">
+    <ClInclude Include="..\obse\obse\NiObjects.h">
       <Filter>obse</Filter>
     </ClInclude>
-    <ClInclude Include="..\obse\obse\ParamInfos.h">
-      <Filter>obse</Filter>
-    </ClInclude>
-    <ClInclude Include="..\obse\obse\PluginAPI.h">
-      <Filter>obse</Filter>
-    </ClInclude>
-    <ClInclude Include="..\obse\obse\Script.h">
-      <Filter>obse</Filter>
-    </ClInclude>
-    <ClInclude Include="..\obse\obse\Utilities.h">
-      <Filter>obse</Filter>
-    </ClInclude>
-    <ClInclude Include="..\obse\obse_common\SafeWrite.h">
-      <Filter>obse</Filter>
-    </ClInclude>
-    <ClInclude Include="ESLManager.h" />
-    <ClInclude Include="ESLHooks.h" />
-    <ClInclude Include="ESLLoadPatch.h" />
-    <ClInclude Include="ESLSerialization.h" />
-    <ClInclude Include="ESLAPI.h" />
-    <ClInclude Include="ESLInterface.h" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="..\obse\obse\GameRTTI_1_2_416.inl">
-      <Filter>obse</Filter>
-    </None>
     <None Include="exports.def" />
   </ItemGroup>
 </Project>

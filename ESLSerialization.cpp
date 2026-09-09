@@ -7,8 +7,6 @@
 
 namespace ESLSerialization {
 
-    OBSESerializationInterface* g_serialization = nullptr;
-
     static const UInt32 kRecordType = 'ESLM';
     static const UInt32 kVersion = 1;
 

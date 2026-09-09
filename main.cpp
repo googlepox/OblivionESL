@@ -9,6 +9,7 @@
 #include "ESLLoadPatch.h"
 #include "ESLSerialization.h"
 #include "ESLApi.h"
+#include "ESLCommands.h"
 
 #include <shlobj.h>
 #include <string>
@@ -17,11 +18,17 @@ IDebugLog                   gLog("OblivionESL.log");
 
 PluginHandle                g_pluginHandle = kPluginHandle_Invalid;
 OBSEMessagingInterface* g_messaging = nullptr;
+OBSEScriptInterface* g_scriptInterface = nullptr;
+OBSESerializationInterface* g_serialization = nullptr;
+OBSEStringVarInterface* g_stringVar = nullptr;
 
 void MessageHandler(OBSEMessagingInterface::Message* msg)
 {
     switch (msg->type)
     {
+    case OBSEMessagingInterface::kMessage_LoadGame:
+        ESLCommands::OverwriteOBSECommands();
+        break;
     case OBSEMessagingInterface::kMessage_ExitToMainMenu:
         ESLLoadPatch::ResetLoadedFlags();
         break;
@@ -94,6 +101,15 @@ extern "C" {
         }
         
         obse->SetOpcodeBase(0x2990);
+
+        g_scriptInterface = (OBSEScriptInterface*)obse->QueryInterface(kInterface_Script);
+
+        g_serialization =
+            (OBSESerializationInterface*)obse->QueryInterface(kInterface_Serialization);
+
+        g_stringVar = (OBSEStringVarInterface*)obse->QueryInterface(kInterface_StringVar);
+
+        RegisterStringVarInterface(g_stringVar);
 
         ESLSerialization::Register(obse, g_pluginHandle);
 
