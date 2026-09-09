@@ -1,6 +1,7 @@
 #include "ESLSerialization.h"
 #include "ESLManager.h"
 #include "ESLLoadPatch.h"
+#include "ESLCommands.h"
 #include "obse/GameAPI.h"
 #include <vector>
 #include <string>
@@ -9,6 +10,11 @@ namespace ESLSerialization {
 
     static const UInt32 kRecordType = 'ESLM';
     static const UInt32 kVersion = 1;
+
+    void NewGameCallback(void*)
+    {
+        ESLCommands::OverwriteOBSECommands();
+    }
 
     void SaveCallback(void*)
     {
@@ -133,6 +139,7 @@ namespace ESLSerialization {
 
         g_serialization->SetSaveCallback(handle, SaveCallback);
         g_serialization->SetPreloadCallback(handle, PreLoadCallback);
+        g_serialization->SetNewGameCallback(handle, NewGameCallback);
 
         _MESSAGE("[ESL] Serialization callbacks registered.");
     }
