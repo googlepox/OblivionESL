@@ -12,7 +12,6 @@
 
 #include <shlobj.h>
 #include <string>
-#include <ESLReload.h>
 
 IDebugLog                   gLog("OblivionESL.log");
 
