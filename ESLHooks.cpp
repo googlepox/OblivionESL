@@ -189,32 +189,6 @@ namespace ESLHooks {
         UInt32 size
     )
     {
-        UInt32 count = size / 4;
-        UInt32* ids = (UInt32*)src;
-
-        ESLManager& manager = ESLManager::Get();
-
-        for (UInt32 i = 0; i < count; i++)
-        {
-            UInt32& id = ids[i];
-            if (!id)
-                continue;
-
-            if (manager.IsEncoded(id))
-            {
-                UInt16 eslIndex = manager.DecodeIndex(id);
-
-                if (!manager.IsIndexValid(eslIndex))
-                {
-                    _WARNING(
-                        "SaveFormID: Invalid ESL index %u for form %08X",
-                        eslIndex,
-                        id
-                    );
-                }
-            }
-        }
-
         g_SaveFormID(thisPtr, nullptr, src, size);
     }
 
