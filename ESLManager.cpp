@@ -7,18 +7,9 @@
 
 namespace {
 
-    // Single source of truth for where the map lives.
     const char* kMapDir = "Data\\OBSE\\Plugins\\OblivionESL";
     const char* kMapPath = "Data\\OBSE\\Plugins\\OblivionESL\\ESLMap.dat";
 
-    // The plugin's own folder exists, but the OblivionESL subfolder does not
-    // until something creates it -- and ofstream will not create directories,
-    // so the first save silently fails without this.
-    //
-    // SHCreateDirectoryExA is not usable here: it requires an absolute path and
-    // returns ERROR_BAD_PATHNAME (161) for a relative one. CreateDirectoryA
-    // accepts relative paths but will not create intermediate components, so
-    // each level is created in turn.
     bool EnsureMapDirectory()
     {
         static const char* kParts[] = {
@@ -49,7 +40,6 @@ namespace {
 
 ESLManager::ESLManager()
 {
-    // Initialize flat arrays — no unordered_map overhead at runtime
     memset(m_activeIndex, 0, sizeof(m_activeIndex));
 
     ResetSaveRemap();
@@ -67,16 +57,12 @@ bool ESLManager::Initialize()
     return true;
 }
 
-// ── Single registration path ──────────────────────────────────────────────────
-
 uint16_t ESLManager::GetOrRegisterESLIndex(const std::string& pluginName)
 {
-    // Already registered — return existing index
     auto it = m_nameToIndex.find(pluginName);
     if (it != m_nameToIndex.end())
         return it->second;
 
-    // Capacity check
     if (m_nextFree >= kMaxESL)
     {
         _ERROR("[ESLManager] Exceeded %u ESL plugin limit! Cannot register: %s",
@@ -89,7 +75,7 @@ uint16_t ESLManager::GetOrRegisterESLIndex(const std::string& pluginName)
     m_nameToIndex[pluginName] = index;
     m_indexToName[index] = pluginName;
 
-    m_dirty = true; // defer disk write until post-load
+    m_dirty = true;
 
     _MESSAGE("[ESLManager] Registered ESL: %s -> index %u",
         pluginName.c_str(), index);
@@ -118,8 +104,6 @@ const char* ESLManager::GetESLName(uint16_t eslIndex) const
     auto it = m_indexToName.find(eslIndex);
     return (it != m_indexToName.end()) ? it->second.c_str() : nullptr;
 }
-
-// ── Runtime modIndex mapping ──────────────────────────────────────────────────
 
 void ESLManager::RegisterFile(void* file, uint16_t eslIndex)
 {
@@ -169,8 +153,6 @@ uint16_t ESLManager::RemapSavedIndex(uint16_t savedIndex) const
     return (savedIndex < kMaxESL) ? m_saveRemap[savedIndex] : kInvalid;
 }
 
-// ── FormID encoding ───────────────────────────────────────────────────────────
-
 uint32_t ESLManager::Encode(uint16_t eslIndex, uint32_t localID) const
 {
     return kContainer |
@@ -192,8 +174,6 @@ uint32_t ESLManager::DecodeLocal(uint32_t formID) const
 {
     return formID & 0x0FFF;
 }
-
-// ── Persistence ───────────────────────────────────────────────────────────────
 
 void ESLManager::LoadPersistentMap()
 {
@@ -225,7 +205,6 @@ void ESLManager::LoadPersistentMap()
         std::string name(len, '\0');
         file.read(name.data(), len);
 
-        // Populate the single source of truth
         m_nameToIndex[name] = index;
         m_indexToName[index] = name;
 

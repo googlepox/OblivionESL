@@ -9,26 +9,8 @@ namespace ESLSerialization {
 
     OBSESerializationInterface* g_serialization = nullptr;
 
-    // 'ESLM' -- our record type in the cosave.
     static const UInt32 kRecordType = 'ESLM';
     static const UInt32 kVersion = 1;
-
-    // ── Why this exists ─────────────────────────────────────────────────────────
-    //
-    // The vanilla save records its plugin list from DataHandler::modsByID, and
-    // ESLs are deliberately not in that array -- so a save written with ESLs
-    // active lists none of them. Every ESL-sourced form then looks orphaned on
-    // load, which is why an equipped spear vanishes and armour unequips.
-    //
-    // Appending ESLs to the vanilla list is not an option: it would shift the
-    // index of every plugin after them and corrupt normal FormID resolution.
-    // Instead the list goes in the OBSE cosave, where the engine will not read
-    // it, and is matched back up on load.
-    //
-    // This also fixes index drift. A saved FormID carries the ESL index the
-    // plugin had when the save was written; if the user has since added or
-    // removed an ESL, that index may now mean a different plugin. Recording the
-    // names lets us remap -- the same job modRefIDTable does for normal plugins.
 
     void SaveCallback(void*)
     {
@@ -37,7 +19,6 @@ namespace ESLSerialization {
 
         ESLManager& manager = ESLManager::Get();
 
-        // Collect currently active ESLs.
         std::vector<std::pair<UInt16, std::string>> entries;
 
         for (UInt16 i = 0; i < ESLManager::kMaxESL; i++)
@@ -81,8 +62,6 @@ namespace ESLSerialization {
 
         ESLManager& manager = ESLManager::Get();
 
-        // Default to identity until told otherwise, so a save with no ESL
-        // record (or one written before this existed) behaves as it used to.
         manager.ResetSaveRemap();
 
         UInt32 type = 0, version = 0, length = 0;
@@ -125,9 +104,6 @@ namespace ESLSerialization {
                 if (currentIndex == ESLManager::kInvalid ||
                     !manager.IsESLIndexActive(currentIndex))
                 {
-                    // Plugin was active when the save was written but is not
-                    // loaded now. Its forms resolve to null, which is what
-                    // vanilla does for any missing plugin.
                     manager.SetSaveRemap(savedIndex, ESLManager::kInvalid);
                     missing++;
 
@@ -150,6 +126,11 @@ namespace ESLSerialization {
         }
     }
 
+    void NewGameCallback(void*)
+    {
+        ESLManager::Get().SavePersistentMap();
+    }
+
     void Register(const OBSEInterface* obse, PluginHandle handle)
     {
         g_serialization =
@@ -164,7 +145,7 @@ namespace ESLSerialization {
 
         g_serialization->SetSaveCallback(handle, SaveCallback);
         g_serialization->SetLoadCallback(handle, LoadCallback);
-        //g_serialization->SetPreloadCallback(handle, PreLoadCallback);
+        g_serialization->SetNewGameCallback(handle, NewGameCallback);
 
         _MESSAGE("[ESL] Serialization callbacks registered.");
     }

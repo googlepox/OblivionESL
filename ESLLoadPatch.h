@@ -4,28 +4,32 @@
 
 namespace ESLLoadPatch {
 
-    // Installs the four patches to TESDataHandler_LoadFiles that keep ESL
-    // plugins out of modsByID and load them from a separate list instead.
-    // Call after ESLHooks::InstallHooks().
     bool InstallPatches();
 
-    // The ESL currently being loaded, or nullptr.
-    //
-    // Once every ESL carries file index 0xFE, the FormID high byte no longer
-    // identifies WHICH ESL a record came from -- so this replaces modIndex as
-    // the key in SetFormID_Hook and ResolveFormID_Hook. It is valid only for
-    // the duration of a LoadFile call issued by the ESL load pass.
     extern ModEntry::Data* g_currentLoadingESL;
 
-    // Number of ESL plugins deferred out of the normal load order.
     UInt32 GetESLCount();
 
-    // The deferred ESL files, for code that needs to do per-file work the
-    // engine would normally do by iterating modsByID -- which ESLs are not in.
     std::vector<ModEntry::Data*> GetESLFiles();
 
-    // Drops the deferred ESL list. Call on teardown -- the engine frees its
-    // ModEntry::Data objects when returning to the main menu, and every entry
-    // here holds one.
     void ClearFileList();
+
+    void ResetLoadedFlags();
+
+    typedef int(__fastcall* tReloadAllFiles)(void* thisPtr, void* edx);
+
+    extern tReloadAllFiles g_ReloadAllFiles;
+
+    int __fastcall ReloadAllFiles_Hook(void* thisPtr, void* edx);
+
+    typedef UInt32(__fastcall* tGetModCount)(void* dataHandler, void* edx);
+    typedef void* (__fastcall* tGetNthMod)(void* dataHandler, void* edx, UInt32 index);
+
+    extern tGetModCount g_GetModCount;
+    extern tGetNthMod   g_GetNthMod;
+
+    UInt32 __fastcall GetModCount_Hook(void* dataHandler, void* edx);
+    void* __fastcall GetNthMod_Hook(void* dataHandler, void* edx, UInt32 index);
+
+    bool InstallReloadHook();
 }

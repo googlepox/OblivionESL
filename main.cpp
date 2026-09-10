@@ -18,16 +18,6 @@ IDebugLog                   gLog("OblivionESL.log");
 PluginHandle                g_pluginHandle = kPluginHandle_Invalid;
 OBSEMessagingInterface* g_messaging = nullptr;
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Message handler
-//
-// There is no OBSE message that means "the data handler has finished loading
-// all plugins", so the ESL map is flushed at the points where that is
-// guaranteed to already have happened: entering a game, and shutdown.
-// SavePersistentMap() is guarded by ESLManager's m_dirty flag, so calling it
-// repeatedly costs nothing when there is nothing new to write.
-// ─────────────────────────────────────────────────────────────────────────────
-
 void MessageHandler(OBSEMessagingInterface::Message* msg)
 {
     switch (msg->type)
@@ -38,25 +28,13 @@ void MessageHandler(OBSEMessagingInterface::Message* msg)
         break;
 
     case OBSEMessagingInterface::kMessage_ExitToMainMenu:
-        // Do NOT clear runtime state here. Returning to the main menu does
-        // not necessarily unload plugins -- TESDataHandler_Clear only runs
-        // on a real unload -- so the ModEntry::Data objects usually stay
-        // valid. Clearing here left m_activeIndex empty while the files
-        // were still live, so every ESL FormID in the next save load
-        // resolved to 0 and its items vanished.
-        //
-        // The reset happens at the start of TESDataHandler_LoadFiles
-        // instead, in ESLLoadPatch::AppendFile, where a load is actually
-        // beginning.
         ESLManager::Get().SavePersistentMap();
+        ESLLoadPatch::ResetLoadedFlags();
         break;
-
     default:
         break;
     }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
 
 extern "C" {
 
@@ -70,8 +48,6 @@ extern "C" {
 
         if (obse->isEditor)
         {
-            // The CS has an entirely different FormID pipeline and none of these
-            // hook addresses apply to it. Refuse rather than crash.
             _MESSAGE("Editor mode not supported, declining to load.");
             return false;
         }
@@ -85,8 +61,6 @@ extern "C" {
 
         if (obse->oblivionVersion != OBLIVION_VERSION)
         {
-            // Every hook address in ESLHooks.cpp is hardcoded for one exe build.
-            // Loading against a different runtime would detour arbitrary code.
             _ERROR("Unsupported runtime version %08X (expected %08X)",
                 obse->oblivionVersion, OBLIVION_VERSION);
             return false;
@@ -101,43 +75,32 @@ extern "C" {
 
         g_pluginHandle = obse->GetPluginHandle();
 
-        // 1. Bring up the manager first. Initialize() loads the persistent
-        //    name -> ESL index map from disk, and the hooks below start consulting
-        //    it as soon as the first plugin loads.
         if (!ESLManager::Get().Initialize())
         {
             _ERROR("ESLManager failed to initialize, aborting.");
             return false;
         }
 
-        // 2. Install the detours. This must happen before the data handler starts
-        //    loading plugins -- LoadFile_Hook is what registers each ESL and
-        //    builds its runtime modIndex mapping.
         if (!ESLHooks::InstallHooks())
         {
             _ERROR("Hook installation failed, aborting.");
             return false;
         }
 
-        // 3. Patch the load order handling so ESL plugins never consume one of
-        //    the 255 slots. Must come after the hooks: AppendFile calls
-        //    ESLHooks::IsESLFile.
         if (!ESLLoadPatch::InstallPatches())
         {
             _ERROR("Load order patches failed, aborting.");
             return false;
         }
 
-        // 4. Cosave serialization. The vanilla save records its plugin list from
-        //    modsByID, which ESLs are not in, so without this every ESL-sourced
-        //    form looks orphaned on load.
-        //ESLSerialization::Register(obse, g_pluginHandle);
+        if (!ESLLoadPatch::InstallReloadHook())
+        {
+            _ERROR("Reload hook failed, aborting.");
+            return false;
+        }
 
-        //    Let xOBSE resolve ESL plugins by name. Without this, any OBSE plugin
-        //    that looks a form up by mod name gets 0xFF back for every ESL.
         ESLApi::Register();
 
-        // 5. Messaging is optional -- it is only used to flush the map to disk.
         g_messaging = (OBSEMessagingInterface*)obse->QueryInterface(kInterface_Messaging);
 
         if (g_messaging)
