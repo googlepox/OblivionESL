@@ -156,6 +156,7 @@
     <ClInclude Include="..\obse\obse_common\SafeWrite.h" />
     <ClInclude Include="ESLAPI.h" />
     <ClInclude Include="ESLHooks.h" />
+    <ClInclude Include="ESLInterface.h" />
     <ClInclude Include="ESLLoadPatch.h" />
     <ClInclude Include="ESLManager.h" />
     <ClInclude Include="ESLSerialization.h" />

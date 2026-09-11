@@ -116,6 +116,7 @@
     <ClInclude Include="ESLLoadPatch.h" />
     <ClInclude Include="ESLSerialization.h" />
     <ClInclude Include="ESLAPI.h" />
+    <ClInclude Include="ESLInterface.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\obse\obse\GameRTTI_1_2_416.inl">
