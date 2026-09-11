@@ -32,4 +32,7 @@ namespace ESLLoadPatch {
     void* __fastcall GetNthMod_Hook(void* dataHandler, void* edx, UInt32 index);
 
     bool InstallReloadHook();
+
+    void UnlinkESLsFromModList();
+    void RelinkESLsToModList();
 }

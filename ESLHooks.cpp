@@ -21,6 +21,7 @@ namespace ESLHooks {
     tIRefToFormID g_IRefToFormID = nullptr;
 
     constexpr UInt32 kESLFlag = 0x00080000;
+    constexpr UInt32 kESLFlagxEdit = 0x00000200;
 
     typedef ModEntry::Data* (__fastcall* tGetMasterByIndex)(
         ModEntry::Data* file, void* edx, UInt32 index);
@@ -95,7 +96,8 @@ namespace ESLHooks {
             | ((UInt32)header[10] << 16)
             | ((UInt32)header[11] << 24);
 
-        return (flags & kESLFlag) != 0;
+
+        return ((flags & kESLFlag) != 0) || ((flags & kESLFlagxEdit) != 0);
     }
 
     static std::unordered_map<ModEntry::Data*, bool> s_eslCache;
