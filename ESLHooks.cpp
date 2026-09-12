@@ -231,10 +231,16 @@ namespace ESLHooks {
 
             if (!ESLManager::IsValidLocalID(localID))
             {
-                _ERROR("[ESL] SetFormID: form %08X has local ID 0x%X outside "
-                    "0x%X-0x%X - plugin was not compacted correctly!",
+                UInt16 eslIndex = (newID >> 12) & 0x0FFF;
+                const char* name = ESLManager::Get().GetESLName(eslIndex);
+
+                _ERROR("[ESL] SetFormID: %08X has local ID 0x%X outside "
+                    "0x%X-0x%X. ESL index %u is '%s'. Either that plugin was "
+                    "flagged without being compacted, or this is not an ESL "
+                    "form at all.",
                     newID, localID,
-                    ESLManager::kMinLocalID, ESLManager::kMaxLocalID);
+                    ESLManager::kMinLocalID, ESLManager::kMaxLocalID,
+                    eslIndex, name ? name : "<not registered>");
             }
         }
 
