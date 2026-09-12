@@ -22,7 +22,13 @@ void MessageHandler(OBSEMessagingInterface::Message* msg)
 {
     switch (msg->type)
     {
+    case OBSEMessagingInterface::kMessage_LoadGame:
+    case OBSEMessagingInterface::kMessage_ExitGame:
+        ESLManager::Get().SavePersistentMap();
+        break;
+
     case OBSEMessagingInterface::kMessage_ExitToMainMenu:
+        ESLManager::Get().SavePersistentMap();
         ESLLoadPatch::ResetLoadedFlags();
         break;
     default:

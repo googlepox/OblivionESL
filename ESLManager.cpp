@@ -53,6 +53,7 @@ ESLManager& ESLManager::Get()
 
 bool ESLManager::Initialize()
 {
+    LoadPersistentMap();
     return true;
 }
 
