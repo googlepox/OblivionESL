@@ -22,13 +22,7 @@ void MessageHandler(OBSEMessagingInterface::Message* msg)
 {
     switch (msg->type)
     {
-    case OBSEMessagingInterface::kMessage_LoadGame:
-    case OBSEMessagingInterface::kMessage_ExitGame:
-        ESLManager::Get().SavePersistentMap();
-        break;
-
     case OBSEMessagingInterface::kMessage_ExitToMainMenu:
-        ESLManager::Get().SavePersistentMap();
         ESLLoadPatch::ResetLoadedFlags();
         break;
     default:
@@ -98,6 +92,10 @@ extern "C" {
             _ERROR("Reload hook failed, aborting.");
             return false;
         }
+        
+        obse->SetOpcodeBase(0x2990);
+
+        ESLSerialization::Register(obse, g_pluginHandle);
 
         ESLApi::Register();
 

@@ -56,6 +56,13 @@ bool ESLManager::Initialize()
     return true;
 }
 
+void ESLManager::ResetAssignments()
+{
+    m_nameToIndex.clear();
+    m_indexToName.clear();
+    m_nextFree = 0;
+}
+
 uint16_t ESLManager::GetOrRegisterESLIndex(const std::string& pluginName)
 {
     auto it = m_nameToIndex.find(pluginName);

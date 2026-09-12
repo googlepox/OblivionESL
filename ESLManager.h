@@ -10,6 +10,8 @@ public:
 
     bool     Initialize();
 
+    void     ResetAssignments();
+
     uint16_t GetOrRegisterESLIndex(const std::string& pluginName);
     bool     IsESLPlugin(const std::string& pluginName) const;
     uint16_t GetESLIndex(const std::string& pluginName) const;

@@ -52,11 +52,6 @@ namespace ESLSerialization {
 
     void PreLoadCallback(void*)
     {
-        return;
-    }
-
-    void LoadCallback(void*)
-    {
         if (!g_serialization)
             return;
 
@@ -126,11 +121,6 @@ namespace ESLSerialization {
         }
     }
 
-    void NewGameCallback(void*)
-    {
-        ESLManager::Get().SavePersistentMap();
-    }
-
     void Register(const OBSEInterface* obse, PluginHandle handle)
     {
         g_serialization =
@@ -144,8 +134,7 @@ namespace ESLSerialization {
         }
 
         g_serialization->SetSaveCallback(handle, SaveCallback);
-        g_serialization->SetLoadCallback(handle, LoadCallback);
-        g_serialization->SetNewGameCallback(handle, NewGameCallback);
+        g_serialization->SetPreloadCallback(handle, PreLoadCallback);
 
         _MESSAGE("[ESL] Serialization callbacks registered.");
     }

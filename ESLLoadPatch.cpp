@@ -44,6 +44,17 @@ namespace ESLLoadPatch {
         return out;
     }
 
+    void ResetLoadedFlags()
+    {
+        for (ESLEntry& entry : s_eslFiles)
+            entry.loaded = false;
+
+        g_currentLoadingESL = nullptr;
+
+        _MESSAGE("[ESL] Reset loaded flags on %u deferred ESL(s).",
+            (UInt32)s_eslFiles.size());
+    }
+
     void ClearFileList()
     {
         s_eslFiles.clear();
@@ -65,6 +76,9 @@ namespace ESLLoadPatch {
             g_currentLoadingESL = nullptr;
 
             ESLManager::Get().ClearRuntimeState();
+
+            ESLManager::Get().ResetAssignments();
+
             ESLHooks::ClearESLCache();
 
             _MESSAGE("[ESL] === LoadFiles run #%u begins; runtime state reset "
@@ -116,94 +130,6 @@ namespace ESLLoadPatch {
         SetFileIndex(file, nullptr, (UInt8)index);
     }
 
-    void ResetLoadedFlags()
-    {
-        for (ESLEntry& entry : s_eslFiles)
-            entry.loaded = false;
-
-        g_currentLoadingESL = nullptr;
-
-        _MESSAGE("[ESL] Reset loaded flags on %u deferred ESL(s).",
-            (UInt32)s_eslFiles.size());
-    }
-
-    static std::vector<ModEntry*> s_unlinked;
-
-    static bool IsOurESLFile(ModEntry::Data* data)
-    {
-        if (!data)
-            return false;
-
-        for (const ESLEntry& entry : s_eslFiles)
-        {
-            if (entry.file == data)
-                return true;
-        }
-
-        return false;
-    }
-
-    void UnlinkESLsFromModList()
-    {
-        if (!g_dataHandler || !*g_dataHandler || s_eslFiles.empty())
-            return;
-
-        DataHandler* dh = *g_dataHandler;
-
-        ModEntry* head = &dh->modList;
-        UInt32 removed = 0;
-
-        while (IsOurESLFile(head->data) && head->next)
-        {
-            ModEntry* orphan = head->next;
-
-            head->data = orphan->data;
-            head->next = orphan->next;
-
-            s_unlinked.push_back(orphan);
-            removed++;
-        }
-
-        for (ModEntry* prev = head; prev && prev->next; )
-        {
-            ModEntry* node = prev->next;
-
-            if (IsOurESLFile(node->data))
-            {
-                prev->next = node->next;
-
-                s_unlinked.push_back(node);
-                removed++;
-            }
-            else
-            {
-                prev = node;
-            }
-        }
-
-        //_MESSAGE("[ESL] Unlinked %u ESL file(s) from modList.", removed);
-    }
-
-    void RelinkESLsToModList()
-    {
-        if (!g_dataHandler || !*g_dataHandler || s_unlinked.empty())
-            return;
-
-        DataHandler* dh = *g_dataHandler;
-
-        ModEntry* head = &dh->modList;
-
-        for (ModEntry* node : s_unlinked)
-        {
-            node->next = head->next;
-            head->next = node;
-        }
-
-        _MESSAGE("[ESL] Relinked %u ESL file(s) into modList.",
-            (UInt32)s_unlinked.size());
-
-        s_unlinked.clear();
-    }
 
     static void LoadOne(DataHandler* dh, ESLEntry& entry)
     {
@@ -396,6 +322,85 @@ namespace ESLLoadPatch {
 
         _MESSAGE("[ESL] Reload hooks installed.");
         return true;
+    }
+
+    static std::vector<ModEntry*> s_unlinked;
+
+    static bool IsOurESLFile(ModEntry::Data* data)
+    {
+        if (!data)
+            return false;
+
+        for (const ESLEntry& entry : s_eslFiles)
+        {
+            if (entry.file == data)
+                return true;
+        }
+
+        return false;
+    }
+
+    void UnlinkESLsFromModList()
+    {
+        if (!g_dataHandler || !*g_dataHandler || s_eslFiles.empty())
+            return;
+
+        DataHandler* dh = *g_dataHandler;
+
+        ModEntry* head = &dh->modList;
+        UInt32 removed = 0;
+
+        while (IsOurESLFile(head->data) && head->next)
+        {
+            ModEntry* orphan = head->next;
+
+            head->data = orphan->data;
+            head->next = orphan->next;
+
+            s_unlinked.push_back(orphan);
+            removed++;
+        }
+
+        for (ModEntry* prev = head; prev && prev->next; )
+        {
+            ModEntry* node = prev->next;
+
+            if (IsOurESLFile(node->data))
+            {
+                prev->next = node->next;
+
+                s_unlinked.push_back(node);
+                removed++;
+
+            }
+            else
+            {
+                prev = node;
+            }
+        }
+
+        _MESSAGE("[ESL] Unlinked %u ESL file(s) from modList.", removed);
+    }
+
+    void RelinkESLsToModList()
+    {
+        if (!g_dataHandler || !*g_dataHandler || s_unlinked.empty())
+            return;
+
+        DataHandler* dh = *g_dataHandler;
+
+        ModEntry* head = &dh->modList;
+
+        for (ModEntry* node : s_unlinked)
+        {
+            node->next = head->next;
+            head->next = node;
+        }
+
+        _MESSAGE("[ESL] Relinked %u ESL file(s) into modList.",
+            (UInt32)s_unlinked.size());
+
+        s_unlinked.clear();
     }
 
 
