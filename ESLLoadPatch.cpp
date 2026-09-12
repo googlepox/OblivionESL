@@ -96,7 +96,7 @@ namespace ESLLoadPatch {
 
             s_eslFiles.push_back(entry);
 
-            _MESSAGE("[ESL] Deferred '%s' -> ESL %u (loads at position %u)",
+            _MESSAGE("[ESL] Deferred '%s' -> ESL %03X (loads at position %u)",
                 file->name, eslIndex, entry.position);
             return;
         }
@@ -181,7 +181,7 @@ namespace ESLLoadPatch {
             }
         }
 
-        _MESSAGE("[ESL] Unlinked %u ESL file(s) from modList.", removed);
+        //_MESSAGE("[ESL] Unlinked %u ESL file(s) from modList.", removed);
     }
 
     void RelinkESLsToModList()

@@ -117,7 +117,7 @@ namespace ESLSerialization {
 
                 if (savedIndex != currentIndex)
                 {
-                    _MESSAGE("[ESL] '%s' moved: saved ESL %u -> current %u",
+                    _MESSAGE("[ESL] '%s' moved: saved ESL %03X -> current %03X",
                         name.c_str(), savedIndex, currentIndex);
                 }
             }
