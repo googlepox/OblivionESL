@@ -77,7 +77,7 @@ namespace ESLLoadPatch {
 
             ESLManager::Get().ClearRuntimeState();
 
-            //ESLManager::Get().ResetAssignments();
+            ESLManager::Get().ResetAssignments();
 
             ESLHooks::ClearESLCache();
 
